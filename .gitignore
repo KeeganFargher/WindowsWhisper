@@ -1,0 +1,29 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node
+node_modules/
+dist/
+build/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Rust / Tauri
+target/
+**/*.rs.bk
+
+# Cloudflare
+.wrangler/
+
+# System
+.env
+.env.local
