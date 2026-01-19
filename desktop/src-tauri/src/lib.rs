@@ -299,8 +299,43 @@ fn paste_text() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
 fn paste_text() -> Result<(), String> {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    let mut enigo = Enigo::new(&Settings::default())
+        .map_err(|e| format!("Failed to create enigo: {}", e))?;
+
+    enigo
+        .key(Key::Meta, Direction::Press)
+        .map_err(|e| format!("Failed to press Command: {}", e))?;
+    enigo
+        .key(Key::Unicode('v'), Direction::Click)
+        .map_err(|e| format!("Failed to press V: {}", e))?;
+    enigo
+        .key(Key::Meta, Direction::Release)
+        .map_err(|e| format!("Failed to release Command: {}", e))?;
+
+    Ok(())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn paste_text() -> Result<(), String> {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    let mut enigo = Enigo::new(&Settings::default())
+        .map_err(|e| format!("Failed to create enigo: {}", e))?;
+
+    enigo
+        .key(Key::Control, Direction::Press)
+        .map_err(|e| format!("Failed to press Control: {}", e))?;
+    enigo
+        .key(Key::Unicode('v'), Direction::Click)
+        .map_err(|e| format!("Failed to press V: {}", e))?;
+    enigo
+        .key(Key::Control, Direction::Release)
+        .map_err(|e| format!("Failed to release Control: {}", e))?;
+
     Ok(())
 }
 

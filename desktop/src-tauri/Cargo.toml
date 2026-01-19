@@ -32,6 +32,12 @@ dirs = "5.0"
 windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
 enigo = "0.2"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+enigo = "0.2"
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+enigo = { version = "0.2", default-features = false, features = ["x11rb"] }
+
 [profile.release]
 strip = true
 lto = true
