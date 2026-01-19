@@ -339,82 +339,40 @@ fn paste_text() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn caret_position() -> Option<(i32, i32)> {
-    use std::{mem, ptr};
-    use windows_sys::Win32::Foundation::POINT;
-    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, GUITHREADINFO,
-    };
-
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd == 0 {
-            return None;
-        }
-
-        let thread_id = GetWindowThreadProcessId(hwnd, ptr::null_mut());
-        if thread_id == 0 {
-            return None;
-        }
-
-        let mut info = GUITHREADINFO {
-            cbSize: mem::size_of::<GUITHREADINFO>() as u32,
-            ..mem::zeroed()
-        };
-        if GetGUIThreadInfo(thread_id, &mut info) == 0 {
-            return None;
-        }
-
-        if info.hwndCaret == 0 {
-            return None;
-        }
-
-        let mut point = POINT {
-            x: info.rcCaret.left,
-            y: info.rcCaret.top,
-        };
-        if ClientToScreen(info.hwndCaret, &mut point) == 0 {
-            return None;
-        }
-
-        Some((point.x, point.y))
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn caret_position() -> Option<(i32, i32)> {
-    None
-}
-
-fn position_popup(window: &tauri::WebviewWindow, anchor: (i32, i32)) {
+fn position_popup_bottom_center(window: &tauri::WebviewWindow) {
     let (width, height) = window
         .outer_size()
         .map(|size| (size.width as i32, size.height as i32))
         .unwrap_or((120, 50));
-    let mut x = anchor.0 - (width / 2);
-    let mut y = anchor.1 - height - 10;
+    use device_query::{DeviceQuery, DeviceState};
+    let device_state = DeviceState::new();
+    let mouse = device_state.get_mouse();
+    let monitor = window
+        .monitor_from_point(mouse.coords.0 as f64, mouse.coords.1 as f64)
+        .ok()
+        .flatten()
+        .or_else(|| window.monitor_from_point(0.0, 0.0).ok().flatten());
 
-    if y < 0 {
-        y = anchor.1 + 20;
-    }
-
-    if let Ok(Some(monitor)) = window.monitor_from_point(anchor.0 as f64, anchor.1 as f64) {
+    if let Some(monitor) = monitor {
         let pos = monitor.position();
         let size = monitor.size();
+        let monitor_width = size.width as i32;
+        let monitor_height = size.height as i32;
         let min_x = pos.x as i32;
         let min_y = pos.y as i32;
-        let max_x = min_x + size.width as i32 - width;
-        let max_y = min_y + size.height as i32 - height;
+        let max_x = min_x + monitor_width - width;
+        let max_y = min_y + monitor_height - height;
+        let mut x = min_x + (monitor_width - width) / 2;
+        // Place the popup around 75% height (about a quarter up from the bottom).
+        let mut y = min_y + (monitor_height * 3 / 4) - (height / 2);
         x = x.clamp(min_x, max_x.max(min_x));
         y = y.clamp(min_y, max_y.max(min_y));
-    }
 
-    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-        x,
-        y,
-    }));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+            x,
+            y,
+        }));
+    }
 }
 
 async fn cancel_recording(app: AppHandle) {
@@ -643,74 +601,16 @@ async fn handle_hotkey_press(app: AppHandle) {
         // Register Escape to cancel
         let _ = app.global_shortcut().register(escape_shortcut);
         
-        // Show and position the popup window near the caret
+        // Show and position the popup window near the bottom center of the active screen
         if let Some(window) = app.get_webview_window("main") {
             // Keep the popup from stealing focus when it appears.
             let _ = window.set_focusable(false);
             let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                width: 80,
-                height: 30,
+                width: 120,
+                height: 45,
             }));
-            let anchor = caret_position().or_else(|| {
-                use device_query::{DeviceQuery, DeviceState};
-                let device_state = DeviceState::new();
-                let mouse = device_state.get_mouse();
-                Some((mouse.coords.0, mouse.coords.1))
-            });
-            if let Some(anchor) = anchor {
-                position_popup(&window, anchor);
-            }
+            position_popup_bottom_center(&window);
             let _ = window.show();
-            
-            // Follow the caret while recording; fall back to mouse clicks if needed.
-            let app_handle = app.clone();
-            tauri::async_runtime::spawn(async move {
-                use device_query::{DeviceQuery, DeviceState};
-                let mut last_anchor: Option<(i32, i32)> = None;
-                let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(16));
-
-                loop {
-                    interval.tick().await;
-                    
-                    // Check if still recording
-                    let is_recording = {
-                        let state = app_handle.state::<AppState>();
-                        let guard = state.is_recording.lock().unwrap();
-                        *guard
-                    };
-                    
-                    if !is_recording {
-                        break;
-                    }
-                    
-                    let anchor = caret_position().or_else(|| {
-                        // Create per-iteration to avoid holding a !Send type across await.
-                        let device_state = DeviceState::new();
-                        let mouse = device_state.get_mouse();
-                        if mouse.button_pressed.iter().any(|&b| b) {
-                            Some((mouse.coords.0, mouse.coords.1))
-                        } else {
-                            None
-                        }
-                    });
-
-                    if let Some(anchor) = anchor {
-                        let should_move = match last_anchor {
-                            Some((last_x, last_y)) => {
-                                (last_x - anchor.0).abs() > 1 || (last_y - anchor.1).abs() > 1
-                            }
-                            None => true,
-                        };
-
-                        if should_move {
-                            if let Some(window) = app_handle.get_webview_window("main") {
-                                position_popup(&window, anchor);
-                            }
-                            last_anchor = Some(anchor);
-                        }
-                    }
-                }
-            });
         }
         
         let _ = app.emit("show-recording", ());

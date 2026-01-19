@@ -8,7 +8,23 @@ on:
   workflow_dispatch:
 
 jobs:
+  # First job: generate a single version tag to share across all platforms
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Generate version tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v0.0.0-$(date +'%Y%m%d.%H%M%S')" >> $GITHUB_OUTPUT
+          fi
+
   release:
+    needs: prepare
     permissions:
       contents: write
     strategy:
@@ -19,16 +35,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Generate version tag
-        id: version
-        shell: bash
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=v0.0.0-$(date +'%Y%m%d.%H%M%S')" >> $GITHUB_OUTPUT
-          fi
 
       - name: Install dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
@@ -57,8 +63,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ steps.version.outputs.tag }}
-          releaseName: "Windows Whisper ${{ steps.version.outputs.tag }}"
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: "Windows Whisper ${{ needs.prepare.outputs.tag }}"
           releaseBody: "See the assets to download this version and install."
           releaseDraft: false
           prerelease: false
