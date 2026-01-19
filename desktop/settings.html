@@ -15,6 +15,7 @@
         <button class="tab-btn" data-tab="postprocessing">
           Post-Processing
         </button>
+        <button class="tab-btn" data-tab="history">History</button>
         <button class="tab-btn" data-tab="shortcuts">Shortcuts</button>
         <button class="tab-btn" data-tab="about">About</button>
       </nav>
@@ -126,6 +127,53 @@
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="remove-filler-toggle" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <div>
+                <label class="setting-label" style="margin-bottom: 2px"
+                  >Remove Punctuation</label
+                >
+                <p style="font-size: 11px; color: var(--text-muted); margin: 0">
+                  Strip all punctuation marks from transcriptions.
+                </p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="remove-punctuation-toggle" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <div>
+                <label class="setting-label" style="margin-bottom: 2px"
+                  >Dedupe Repeated Phrases</label
+                >
+                <p style="font-size: 11px; color: var(--text-muted); margin: 0">
+                  Collapse repeated words and phrases (e.g., "I need you, I need
+                  you" → "I need you").
+                </p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="dedupe-phrases-toggle" checked />
                 <span class="toggle-slider"></span>
               </label>
             </div>
@@ -265,6 +313,36 @@
           </div>
         </div>
 
+        <!-- History Tab -->
+        <div class="tab-content" id="history">
+          <div class="section-header">
+            <h1 class="section-title">History</h1>
+            <p class="section-description">
+              View your recent transcriptions with raw and processed text.
+            </p>
+          </div>
+
+          <div id="history-list" class="history-list"></div>
+
+          <div style="margin-top: 16px; display: flex; gap: 8px">
+            <button
+              type="button"
+              id="refresh-history-btn"
+              class="btn btn-secondary"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              id="clear-history-btn"
+              class="btn btn-secondary"
+              style="color: var(--error)"
+            >
+              Clear All
+            </button>
+          </div>
+        </div>
+
         <!-- About Tab -->
         <div class="tab-content" id="about">
           <div class="section-header">
@@ -330,6 +408,17 @@
         "replacement-replace-input",
       );
       const addReplacementBtn = document.getElementById("add-replacement-btn");
+      const removePunctuationToggle = document.getElementById(
+        "remove-punctuation-toggle",
+      );
+      const dedupePhrasesToggle = document.getElementById(
+        "dedupe-phrases-toggle",
+      );
+
+      // History elements
+      const historyList = document.getElementById("history-list");
+      const refreshHistoryBtn = document.getElementById("refresh-history-btn");
+      const clearHistoryBtn = document.getElementById("clear-history-btn");
 
       // State
       let currentHotkey = "Ctrl+Shift+Space";
@@ -448,6 +537,10 @@
           // Post-processing settings
           autoCapitalizeToggle.checked = settings.auto_capitalize ?? true;
           removeFillerToggle.checked = settings.remove_filler_words ?? true;
+          removePunctuationToggle.checked =
+            settings.remove_punctuation ?? false;
+          dedupePhrasesToggle.checked =
+            settings.dedupe_repeated_phrases ?? true;
           fillerWords = settings.filler_words || [];
           customReplacements = settings.custom_replacements || [];
 
@@ -508,6 +601,8 @@
               api_url: apiUrlInput.value,
               auto_capitalize: autoCapitalizeToggle.checked,
               remove_filler_words: removeFillerToggle.checked,
+              remove_punctuation: removePunctuationToggle.checked,
+              dedupe_repeated_phrases: dedupePhrasesToggle.checked,
               filler_words: fillerWords,
               custom_replacements: customReplacements,
             },
@@ -522,6 +617,93 @@
       });
 
       loadSettings();
+
+      // History functions
+      async function loadHistory() {
+        try {
+          const history = await invoke("get_history");
+          renderHistory(history.entries || []);
+        } catch (e) {
+          console.error("Failed to load history:", e);
+        }
+      }
+
+      function formatTimestamp(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleString();
+      }
+
+      function renderHistory(entries) {
+        if (entries.length === 0) {
+          historyList.innerHTML =
+            '<div class="history-empty">No transcriptions yet.</div>';
+          return;
+        }
+
+        historyList.innerHTML = entries
+          .map(
+            (entry, index) => `
+          <div class="history-entry">
+            <div class="history-timestamp">${formatTimestamp(entry.timestamp)}</div>
+            <div class="history-section">
+              <div class="history-label">
+                <span>Raw</span>
+                <button type="button" class="history-copy-btn" data-copy="raw-${index}">Copy</button>
+              </div>
+              <div class="history-text raw" id="raw-${index}">${escapeHtml(entry.raw_text)}</div>
+            </div>
+            <div class="history-section">
+              <div class="history-label">
+                <span>Processed</span>
+                <button type="button" class="history-copy-btn" data-copy="processed-${index}">Copy</button>
+              </div>
+              <div class="history-text" id="processed-${index}">${escapeHtml(entry.processed_text)}</div>
+            </div>
+          </div>
+        `,
+          )
+          .join("");
+
+        // Add copy listeners
+        historyList.querySelectorAll(".history-copy-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const targetId = btn.dataset.copy;
+            const text = document.getElementById(targetId)?.textContent || "";
+            await navigator.clipboard.writeText(text);
+            const original = btn.textContent;
+            btn.textContent = "Copied!";
+            setTimeout(() => (btn.textContent = original), 1000);
+          });
+        });
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      refreshHistoryBtn.addEventListener("click", loadHistory);
+
+      clearHistoryBtn.addEventListener("click", async () => {
+        if (confirm("Are you sure you want to clear all history?")) {
+          try {
+            await invoke("clear_history");
+            loadHistory();
+          } catch (e) {
+            alert("Failed to clear history: " + e);
+          }
+        }
+      });
+
+      // Load history when switching to the history tab
+      tabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (btn.dataset.tab === "history") {
+            loadHistory();
+          }
+        });
+      });
     </script>
   </body>
 </html>

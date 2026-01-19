@@ -79,6 +79,113 @@ pub fn apply_replacements(text: &str, rules: &[ReplacementRule]) -> String {
     result
 }
 
+/// Removes all punctuation from the text.
+pub fn remove_punctuation(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+
+    for ch in text.chars() {
+        if !ch.is_ascii_punctuation() {
+            result.push(ch);
+        }
+    }
+
+    // Clean up extra whitespace that may result from removing punctuation
+    let whitespace_re = Regex::new(r"\s+").unwrap();
+    whitespace_re.replace_all(&result, " ").trim().to_string()
+}
+
+/// Normalizes a word for comparison by lowercasing and removing punctuation.
+fn normalize_word(word: &str) -> String {
+    word.chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>()
+        .to_lowercase()
+}
+
+/// Collapses consecutive duplicate words (e.g., "the the" → "the").
+fn collapse_duplicate_words(text: &str) -> String {
+    let mut output: Vec<&str> = Vec::new();
+    let mut prev_norm: Option<String> = None;
+
+    for word in text.split_whitespace() {
+        let norm = normalize_word(word);
+        if let Some(prev) = &prev_norm {
+            if *prev == norm {
+                continue;
+            }
+        }
+        output.push(word);
+        prev_norm = Some(norm);
+    }
+
+    output.join(" ")
+}
+
+/// Collapses repeated multi-word phrases (e.g., "I need you, I need you" → "I need you").
+/// Handles phrases up to 8 words long.
+fn collapse_repeated_phrases(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() < 4 {
+        return text.to_string();
+    }
+
+    let max_phrase_len = 8; // Maximum phrase length to detect
+    let mut output: Vec<&str> = Vec::new();
+    let mut i = 0;
+
+    while i < words.len() {
+        let remaining = words.len() - i;
+        let max_n = (remaining / 2).min(max_phrase_len);
+        let mut collapsed = false;
+
+        // Try to find repeated phrases, starting with longer ones
+        for n in (2..=max_n).rev() {
+            // Count how many times this phrase repeats consecutively
+            let mut repeat_count = 1;
+            let mut j = i + n;
+
+            while j + n <= words.len() {
+                let mut matches = true;
+                for k in 0..n {
+                    if normalize_word(words[i + k]) != normalize_word(words[j + k]) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if matches {
+                    repeat_count += 1;
+                    j += n;
+                } else {
+                    break;
+                }
+            }
+
+            if repeat_count > 1 {
+                // Keep only the first occurrence of the phrase
+                output.extend_from_slice(&words[i..i + n]);
+                i += n * repeat_count;
+                collapsed = true;
+                break;
+            }
+        }
+
+        if !collapsed {
+            output.push(words[i]);
+            i += 1;
+        }
+    }
+
+    output.join(" ")
+}
+
+/// Deduplicates repeated words and phrases in the text.
+pub fn dedupe_repeated_phrases(text: &str) -> String {
+    // First collapse multi-word repeated phrases
+    let result = collapse_repeated_phrases(text);
+    // Then collapse any remaining duplicate adjacent words
+    collapse_duplicate_words(&result)
+}
+
 /// Main orchestrator function that applies all enabled post-processing steps.
 pub fn apply_postprocessing(text: &str, settings: &Settings) -> String {
     if text.is_empty() {
@@ -97,7 +204,18 @@ pub fn apply_postprocessing(text: &str, settings: &Settings) -> String {
         result = apply_replacements(&result, &settings.custom_replacements);
     }
 
-    // 3. Capitalize sentences last (so we capitalize the cleaned text)
+    // 3. Remove punctuation
+    if settings.remove_punctuation {
+        result = remove_punctuation(&result);
+    }
+
+    // 4. Dedupe repeated phrases (like "I need you, I need you, I need you")
+    if settings.dedupe_repeated_phrases {
+        result = dedupe_repeated_phrases(&result);
+    }
+
+    // 5. Capitalize sentences last (so we capitalize the cleaned text)
+    // Note: If punctuation is removed, this will only capitalize the first letter
     if settings.auto_capitalize {
         result = capitalize_sentences(&result);
     }

@@ -24,6 +24,14 @@ pub struct Settings {
     pub filler_words: Vec<String>,
     #[serde(default)]
     pub custom_replacements: Vec<ReplacementRule>,
+    #[serde(default)]
+    pub remove_punctuation: bool,
+    #[serde(default = "default_true")]
+    pub dedupe_repeated_phrases: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_filler_words() -> Vec<String> {
@@ -51,6 +59,8 @@ impl Default for Settings {
             remove_filler_words: true,
             filler_words: default_filler_words(),
             custom_replacements: Vec::new(),
+            remove_punctuation: false,
+            dedupe_repeated_phrases: true,
         }
     }
 }

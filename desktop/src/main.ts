@@ -15,7 +15,6 @@ const previewMode =
   !tauriAvailable || new URLSearchParams(window.location.search).has("preview");
 
 // Create the popup UI
-// Create the popup UI
 function createPopupUI(): HTMLElement {
   const popup = document.createElement("div");
   popup.className = "popup";
@@ -28,7 +27,7 @@ function createPopupUI(): HTMLElement {
 }
 
 // Visualizer State
-let audioData: number[] = new Array(50).fill(0);
+let audioData: number[] = new Array(20).fill(0);
 let animationId: number | null = null;
 let previewAudioTimer: number | null = null;
 
@@ -36,46 +35,46 @@ function startVisualizer() {
   const canvas = document.getElementById("audio-canvas") as HTMLCanvasElement;
   if (!canvas) return;
 
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { alpha: true });
   if (!ctx) return;
 
-  // Handle high output density displays
+  // Handle high DPI displays with device-pixel alignment for crisp bars
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
+  const pixelWidth = Math.max(1, Math.round(rect.width * dpr));
+  const pixelHeight = Math.max(1, Math.round(rect.height * dpr));
+  const gap = Math.max(1, Math.round(2 * dpr));
+  const minBarHeight = Math.max(1, Math.round(4 * dpr));
+
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   const draw = () => {
-    const width = rect.width;
-    const height = rect.height;
-    const centerY = height / 2;
+    const width = pixelWidth;
+    const height = pixelHeight;
+    const centerY = Math.round(height / 2);
 
     ctx.clearRect(0, 0, width, height);
 
-    // Style
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "#ffffff";
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = "rgba(255, 255, 255, 0.4)";
+    // Draw bars as filled rectangles for crisp rendering
+    const numBars = audioData.length;
+    const barWidth = Math.max(
+      1,
+      Math.floor((width - gap * (numBars + 1)) / numBars),
+    );
+    const totalWidth = barWidth * numBars + gap * (numBars - 1);
+    const startX = Math.round((width - totalWidth) / 2);
 
-    // Draw mirrored waveform
-    ctx.beginPath();
+    for (let i = 0; i < numBars; i++) {
+      const x = Math.round(startX + i * (barWidth + gap));
+      const val = Math.min(1.0, audioData[i] * 4.0);
+      const barHeight = Math.max(minBarHeight, Math.round(val * (height * 0.5)));
+      const y = Math.round(centerY - barHeight / 2);
 
-    const barWidth = width / audioData.length;
-
-    for (let i = 0; i < audioData.length; i++) {
-      const x = i * barWidth;
-      // amplify the signal for better visuals
-      const val = Math.min(1.0, audioData[i] * 5);
-      const barHeight = val * (height * 0.8);
-
-      // Draw a vertical line centered vertically
-      ctx.moveTo(x + barWidth / 2, centerY - barHeight / 2);
-      ctx.lineTo(x + barWidth / 2, centerY + barHeight / 2);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + val * 0.4})`;
+      ctx.fillRect(x, y, barWidth, barHeight);
     }
-    ctx.stroke();
 
     animationId = requestAnimationFrame(draw);
   };
@@ -112,6 +111,7 @@ function createProcessingUI(): HTMLElement {
   popup.className = "popup";
   popup.innerHTML = `
     <div class="spinner"></div>
+    <span class="status-text">Thinking...</span>
   `;
   return popup;
 }
@@ -121,7 +121,10 @@ function createSuccessUI(): HTMLElement {
   const popup = document.createElement("div");
   popup.className = "popup";
   popup.innerHTML = `
-    <span class="status-text success">✓ Copied!</span>
+    <span class="status-text success">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      Copied
+    </span>
   `;
   return popup;
 }
@@ -131,7 +134,10 @@ function createErrorUI(message: string): HTMLElement {
   const popup = document.createElement("div");
   popup.className = "popup";
   popup.innerHTML = `
-    <span class="status-text error">✗ ${message}</span>
+    <span class="status-text error">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      ${message}
+    </span>
   `;
   return popup;
 }
@@ -233,12 +239,17 @@ async function init() {
     return;
   }
   // Listen for audio levels
+  let lastVal = 0;
   listen<number>("audio-level", (event) => {
-    // Boost low signals with sqrt
-    const val = Math.sqrt(event.payload);
+    // Boost low signals and apply smoothing
+    const targetVal = Math.sqrt(event.payload);
+
+    // Simple smoothing (Lerp) to make it feel more "liquid"
+    const smoothedVal = lastVal + (targetVal - lastVal) * 0.4;
+    lastVal = smoothedVal;
 
     // Push to buffer, remove old
-    audioData.push(val);
+    audioData.push(smoothedVal);
     audioData.shift();
   });
 

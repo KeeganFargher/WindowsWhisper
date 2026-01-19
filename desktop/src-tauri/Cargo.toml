@@ -28,6 +28,7 @@ image = "0.24"
 device_query = "0.2"
 dirs = "5.0"
 regex = "1"
+chrono = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }

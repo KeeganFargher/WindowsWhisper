@@ -2,11 +2,13 @@
 
 pub mod audio;
 pub mod commands;
+pub mod history;
 pub mod postprocessing;
 pub mod settings;
 
 use audio::AudioRecorder;
 use base64::{engine::general_purpose::STANDARD, Engine};
+use history::TranscriptionHistory;
 use image::EncodableLayout;
 use serde::{Deserialize, Serialize};
 use settings::Settings;
@@ -37,6 +39,7 @@ struct ChunkControl {
 pub struct AppState {
     pub recorder: Mutex<Option<AudioRecorder>>,
     pub settings: Mutex<Settings>,
+    pub history: Mutex<TranscriptionHistory>,
     pub is_recording: Mutex<bool>,
     pub chunk_texts: Mutex<Vec<String>>,
     pub chunk_control: Mutex<Option<ChunkControl>>,
@@ -47,6 +50,7 @@ impl Default for AppState {
         Self {
             recorder: Mutex::new(None),
             settings: Mutex::new(Settings::load()),
+            history: Mutex::new(TranscriptionHistory::load()),
             is_recording: Mutex::new(false),
             chunk_texts: Mutex::new(Vec::new()),
             chunk_control: Mutex::new(None),
@@ -463,10 +467,10 @@ async fn handle_hotkey_press(app: AppHandle) {
             collected
         };
 
-        let text = consolidate_chunk_texts(&chunk_texts);
+        let raw_text = consolidate_chunk_texts(&chunk_texts);
 
         // Apply post-processing transformations
-        let text = postprocessing::apply_postprocessing(&text, &settings);
+        let text = postprocessing::apply_postprocessing(&raw_text, &settings);
 
         if text.is_empty() {
             let _ = app.emit(
@@ -474,6 +478,12 @@ async fn handle_hotkey_press(app: AppHandle) {
                 "No text returned from transcription".to_string(),
             );
             return;
+        }
+
+        // Log to history
+        {
+            let mut history = state.history.lock().unwrap();
+            history.add_entry(raw_text.clone(), text.clone());
         }
 
         if let Some(window) = app.get_webview_window("main") {
@@ -511,11 +521,22 @@ async fn handle_hotkey_press(app: AppHandle) {
                 // Create volume channel
                 let (vol_tx, vol_rx) = std::sync::mpsc::channel();
 
-                // Spawn listener
+                // Spawn listener with throttling
                 let app_handle = app.clone();
                 std::thread::spawn(move || {
+                    let mut max_level: f32 = 0.0;
+                    let mut last_emit = std::time::Instant::now();
+
                     while let Ok(level) = vol_rx.recv() {
-                        let _ = app_handle.emit("audio-level", level);
+                        if level > max_level {
+                            max_level = level;
+                        }
+
+                        if last_emit.elapsed() >= std::time::Duration::from_millis(20) {
+                            let _ = app_handle.emit("audio-level", max_level);
+                            max_level = 0.0;
+                            last_emit = std::time::Instant::now();
+                        }
                     }
                 });
 
@@ -614,8 +635,8 @@ async fn handle_hotkey_press(app: AppHandle) {
             // Keep the popup from stealing focus when it appears.
             let _ = window.set_focusable(false);
             let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                width: 240,
-                height: 90,
+                width: 150,
+                height: 48,
             }));
             position_popup_bottom_center(&window);
             let _ = window.show();
@@ -759,7 +780,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::hide_popup,
             commands::get_settings,
-            commands::save_settings
+            commands::save_settings,
+            commands::get_history,
+            commands::clear_history
         ])
         .setup(|app| {
             // Create tray menu

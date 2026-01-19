@@ -1,3 +1,4 @@
+use crate::history::TranscriptionHistory;
 use crate::settings::Settings;
 use crate::AppState;
 use tauri::State;
@@ -16,5 +17,17 @@ pub fn get_settings(state: State<AppState>) -> Settings {
 pub fn save_settings(state: State<AppState>, settings: Settings) -> Result<(), String> {
     settings.save()?;
     *state.settings.lock().unwrap() = settings;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_history(state: State<AppState>) -> TranscriptionHistory {
+    state.history.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn clear_history(state: State<AppState>) -> Result<(), String> {
+    let mut history = state.history.lock().unwrap();
+    history.clear();
     Ok(())
 }
