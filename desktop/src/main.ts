@@ -1,11 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./styles.css";
 
 type AppState = "idle" | "recording" | "processing" | "success" | "error";
-
-let currentState: AppState = "idle";
 
 // Create the popup UI
 // Create the popup UI
@@ -96,7 +93,7 @@ function createProcessingUI(): HTMLElement {
 }
 
 // Create success UI
-function createSuccessUI(text: string): HTMLElement {
+function createSuccessUI(): HTMLElement {
     const popup = document.createElement("div");
     popup.className = "popup";
     popup.innerHTML = `
@@ -119,8 +116,6 @@ function createErrorUI(message: string): HTMLElement {
 function updateUI(state: AppState, data?: string) {
     const app = document.getElementById("app")!;
     app.innerHTML = "";
-    currentState = state;
-
     switch (state) {
         case "recording":
             app.appendChild(createPopupUI());
@@ -132,7 +127,7 @@ function updateUI(state: AppState, data?: string) {
             break;
         case "success":
             stopVisualizer();
-            app.appendChild(createSuccessUI(data || ""));
+            app.appendChild(createSuccessUI());
             // Auto-hide after 1.5 seconds
             setTimeout(() => {
                 invoke("hide_popup");
@@ -156,8 +151,6 @@ function updateUI(state: AppState, data?: string) {
 
 // Initialize the app
 async function init() {
-    const appWindow = getCurrentWindow();
-
     // Listen for audio levels
     listen<number>("audio-level", (event) => {
         // Boost low signals with sqrt
