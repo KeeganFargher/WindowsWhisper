@@ -279,6 +279,7 @@ async fn shutdown_chunking(app: AppHandle, final_chunk: Option<Vec<u8>>) -> Vec<
     collected
 }
 
+#[cfg(target_os = "windows")]
 fn paste_text() -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
     
@@ -295,6 +296,11 @@ fn paste_text() -> Result<(), String> {
         .key(Key::Control, Direction::Release)
         .map_err(|e| format!("Failed to release Control: {}", e))?;
     
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn paste_text() -> Result<(), String> {
     Ok(())
 }
 
