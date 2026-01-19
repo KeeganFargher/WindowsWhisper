@@ -1,98 +1,458 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Settings - Windows Whisper</title>
     <link rel="stylesheet" href="/src/styles.css" />
-    <style>
-      body {
-        background: var(--bg-secondary);
-        padding: 24px;
-        overflow: hidden;
-      }
-    </style>
   </head>
   <body>
-    <div
-      class="settings-panel"
-      style="width: 100%; height: 100%; box-shadow: none; padding: 0"
-    >
-      <h2 style="margin-top: 0">Configuration</h2>
+    <div class="settings-container">
+      <nav class="settings-sidebar">
+        <div class="sidebar-title">Whisper</div>
+        <button class="tab-btn active" data-tab="general">General</button>
+        <button class="tab-btn" data-tab="api">Transcription</button>
+        <button class="tab-btn" data-tab="postprocessing">
+          Post-Processing
+        </button>
+        <button class="tab-btn" data-tab="shortcuts">Shortcuts</button>
+        <button class="tab-btn" data-tab="about">About</button>
+      </nav>
 
-      <div class="setting-group">
-        <label class="setting-label">Global Hotkey</label>
-        <input
-          type="text"
-          id="hotkey-input"
-          class="setting-input hotkey-input"
-          readonly
-          value="Ctrl+Shift+Space"
-        />
-        <p
-          style="
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 4px;
-            text-align: center;
-          "
-        >
-          Click to record new hotkey
-        </p>
-      </div>
+      <main class="settings-main">
+        <!-- General Tab -->
+        <div class="tab-content active" id="general">
+          <div class="section-header">
+            <h1 class="section-title">General</h1>
+            <p class="section-description">
+              Configure the basics of your recording experience.
+            </p>
+          </div>
 
-      <div class="setting-group">
-        <label class="setting-label">API Key (Cloudflare)</label>
-        <input
-          type="password"
-          id="api-key-input"
-          class="setting-input"
-          placeholder="Enter your Worker API Key"
-        />
-      </div>
+          <div class="setting-item">
+            <label class="setting-label">Global Hotkey</label>
+            <input
+              type="text"
+              id="hotkey-input"
+              class="setting-input hotkey-input"
+              readonly
+              value="Ctrl+Shift+Space"
+            />
+            <p
+              style="font-size: 11px; color: var(--text-muted); margin-top: 4px"
+            >
+              Click the input above and press your desired key combination.
+            </p>
+          </div>
+        </div>
 
-      <div class="setting-group">
-        <label class="setting-label">Worker URL</label>
-        <input
-          type="text"
-          id="api-url-input"
-          class="setting-input"
-          placeholder="https://..."
-        />
-      </div>
+        <!-- API Tab -->
+        <div class="tab-content" id="api">
+          <div class="section-header">
+            <h1 class="section-title">Transcription</h1>
+            <p class="section-description">
+              Connect to your Cloudflare AI Worker backend.
+            </p>
+          </div>
 
-      <div
-        style="
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-          margin-top: auto;
-        "
-      >
-        <button id="save-btn" class="btn btn-primary">Save Changes</button>
-      </div>
+          <div class="setting-item">
+            <label class="setting-label">Worker URL</label>
+            <input
+              type="text"
+              id="api-url-input"
+              class="setting-input"
+              placeholder="https://your-worker.workers.dev"
+            />
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">API Key</label>
+            <input
+              type="password"
+              id="api-key-input"
+              class="setting-input"
+              placeholder="••••••••••••••••"
+            />
+          </div>
+        </div>
+
+        <!-- Post-Processing Tab -->
+        <div class="tab-content" id="postprocessing">
+          <div class="section-header">
+            <h1 class="section-title">Post-Processing</h1>
+            <p class="section-description">
+              Clean up transcriptions automatically after recording.
+            </p>
+          </div>
+
+          <div class="setting-item">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <div>
+                <label class="setting-label" style="margin-bottom: 2px"
+                  >Auto-Capitalize</label
+                >
+                <p style="font-size: 11px; color: var(--text-muted); margin: 0">
+                  Capitalize the first letter of each sentence.
+                </p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="auto-capitalize-toggle" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <div>
+                <label class="setting-label" style="margin-bottom: 2px"
+                  >Remove Filler Words</label
+                >
+                <p style="font-size: 11px; color: var(--text-muted); margin: 0">
+                  Remove "um", "uh", "like", etc. from transcriptions.
+                </p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="remove-filler-toggle" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">Filler Words</label>
+            <div id="filler-words-container" class="chips-container"></div>
+            <div style="display: flex; gap: 8px; margin-top: 8px">
+              <input
+                type="text"
+                id="new-filler-input"
+                class="setting-input"
+                placeholder="Add a filler word..."
+                style="flex: 1"
+              />
+              <button
+                type="button"
+                id="add-filler-btn"
+                class="btn btn-secondary"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">Custom Replacements</label>
+            <p
+              style="
+                font-size: 11px;
+                color: var(--text-muted);
+                margin-bottom: 8px;
+              "
+            >
+              Automatically replace words or phrases in transcriptions.
+            </p>
+            <div id="replacements-container"></div>
+            <div style="display: flex; gap: 8px; margin-top: 8px">
+              <input
+                type="text"
+                id="replacement-find-input"
+                class="setting-input"
+                placeholder="Find..."
+                style="flex: 1"
+              />
+              <input
+                type="text"
+                id="replacement-replace-input"
+                class="setting-input"
+                placeholder="Replace with..."
+                style="flex: 1"
+              />
+              <button
+                type="button"
+                id="add-replacement-btn"
+                class="btn btn-secondary"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shortcuts Tab -->
+        <div class="tab-content" id="shortcuts">
+          <div class="section-header">
+            <h1 class="section-title">Shortcuts</h1>
+            <p class="section-description">
+              Keyboard shortcuts for various actions.
+            </p>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 16px">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding-bottom: 12px;
+                border-bottom: 1px solid var(--border-subtle);
+              "
+            >
+              <span style="font-size: 13px; color: var(--text-secondary)"
+                >Start/Stop Recording</span
+              >
+              <span
+                style="
+                  font-family: monospace;
+                  background: var(--bg-card);
+                  padding: 4px 8px;
+                  border-radius: 4px;
+                  font-size: 12px;
+                "
+                >Global Hotkey</span
+              >
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding-bottom: 12px;
+                border-bottom: 1px solid var(--border-subtle);
+              "
+            >
+              <span style="font-size: 13px; color: var(--text-secondary)"
+                >Cancel Recording</span
+              >
+              <span
+                style="
+                  font-family: monospace;
+                  background: var(--bg-card);
+                  padding: 4px 8px;
+                  border-radius: 4px;
+                  font-size: 12px;
+                "
+                >Esc</span
+              >
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding-bottom: 12px;
+                border-bottom: 1px solid var(--border-subtle);
+              "
+            >
+              <span style="font-size: 13px; color: var(--text-secondary)"
+                >Open Settings</span
+              >
+              <span style="font-size: 11px; color: var(--text-muted)"
+                >From Tray Menu</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- About Tab -->
+        <div class="tab-content" id="about">
+          <div class="section-header">
+            <h1 class="section-title">About</h1>
+            <p class="section-description">Windows Whisper v1.0.0</p>
+          </div>
+
+          <div
+            style="
+              color: var(--text-secondary);
+              font-size: 13px;
+              line-height: 1.6;
+            "
+          >
+            <p>
+              Windows Whisper is a minimal, high-performance push-to-talk
+              transcription tool built with Tauri and Rust.
+            </p>
+            <p style="margin-top: 12px">
+              Transcriptions are powered by OpenAI Whisper running on Cloudflare
+              Workers AI.
+            </p>
+          </div>
+        </div>
+
+        <div class="footer">
+          <button id="save-btn" class="btn btn-primary">Save Changes</button>
+        </div>
+      </main>
     </div>
 
     <script type="module">
       import { invoke } from "@tauri-apps/api/core";
       import { getCurrentWindow } from "@tauri-apps/api/window";
 
+      // DOM elements
       const hotkeyInput = document.getElementById("hotkey-input");
       const apiKeyInput = document.getElementById("api-key-input");
       const apiUrlInput = document.getElementById("api-url-input");
       const saveBtn = document.getElementById("save-btn");
+      const tabBtns = document.querySelectorAll(".tab-btn");
+      const tabContents = document.querySelectorAll(".tab-content");
 
+      // Post-processing elements
+      const autoCapitalizeToggle = document.getElementById(
+        "auto-capitalize-toggle",
+      );
+      const removeFillerToggle = document.getElementById(
+        "remove-filler-toggle",
+      );
+      const fillerWordsContainer = document.getElementById(
+        "filler-words-container",
+      );
+      const newFillerInput = document.getElementById("new-filler-input");
+      const addFillerBtn = document.getElementById("add-filler-btn");
+      const replacementsContainer = document.getElementById(
+        "replacements-container",
+      );
+      const replacementFindInput = document.getElementById(
+        "replacement-find-input",
+      );
+      const replacementReplaceInput = document.getElementById(
+        "replacement-replace-input",
+      );
+      const addReplacementBtn = document.getElementById("add-replacement-btn");
+
+      // State
       let currentHotkey = "Ctrl+Shift+Space";
       let isRecordingHotkey = false;
+      let fillerWords = [];
+      let customReplacements = [];
+
+      // Tab Switching Logic
+      tabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tabId = btn.getAttribute("data-tab");
+          tabBtns.forEach((b) => b.classList.remove("active"));
+          tabContents.forEach((c) => c.classList.remove("active"));
+          btn.classList.add("active");
+          document.getElementById(tabId).classList.add("active");
+        });
+      });
+
+      // Render filler words as chips
+      function renderFillerWords() {
+        fillerWordsContainer.innerHTML = "";
+        fillerWords.forEach((word, index) => {
+          const chip = document.createElement("div");
+          chip.className = "chip";
+          chip.innerHTML = `
+            <span>${word}</span>
+            <button type="button" class="chip-remove" data-index="${index}">&times;</button>
+          `;
+          fillerWordsContainer.appendChild(chip);
+        });
+
+        // Add remove listeners
+        fillerWordsContainer.querySelectorAll(".chip-remove").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            const index = parseInt(e.target.dataset.index);
+            fillerWords.splice(index, 1);
+            renderFillerWords();
+          });
+        });
+      }
+
+      // Render custom replacements
+      function renderReplacements() {
+        replacementsContainer.innerHTML = "";
+        customReplacements.forEach((rule, index) => {
+          const row = document.createElement("div");
+          row.className = "replacement-row";
+          row.innerHTML = `
+            <span class="replacement-find">${rule.find}</span>
+            <span class="replacement-arrow">→</span>
+            <span class="replacement-replace">${rule.replace}</span>
+            <button type="button" class="replacement-remove" data-index="${index}">&times;</button>
+          `;
+          replacementsContainer.appendChild(row);
+        });
+
+        // Add remove listeners
+        replacementsContainer
+          .querySelectorAll(".replacement-remove")
+          .forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              const index = parseInt(e.target.dataset.index);
+              customReplacements.splice(index, 1);
+              renderReplacements();
+            });
+          });
+      }
+
+      // Add filler word
+      addFillerBtn.addEventListener("click", () => {
+        const word = newFillerInput.value.trim().toLowerCase();
+        if (word && !fillerWords.includes(word)) {
+          fillerWords.push(word);
+          renderFillerWords();
+          newFillerInput.value = "";
+        }
+      });
+
+      newFillerInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addFillerBtn.click();
+        }
+      });
+
+      // Add replacement rule
+      addReplacementBtn.addEventListener("click", () => {
+        const find = replacementFindInput.value.trim();
+        const replace = replacementReplaceInput.value.trim();
+        if (find) {
+          customReplacements.push({ find, replace });
+          renderReplacements();
+          replacementFindInput.value = "";
+          replacementReplaceInput.value = "";
+        }
+      });
+
+      replacementReplaceInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addReplacementBtn.click();
+        }
+      });
 
       // Load current settings
       async function loadSettings() {
         try {
           const settings = await invoke("get_settings");
+
+          // Core settings
           currentHotkey = settings.hotkey;
           hotkeyInput.value = currentHotkey;
           apiKeyInput.value = settings.api_key;
           apiUrlInput.value = settings.api_url;
+
+          // Post-processing settings
+          autoCapitalizeToggle.checked = settings.auto_capitalize ?? true;
+          removeFillerToggle.checked = settings.remove_filler_words ?? true;
+          fillerWords = settings.filler_words || [];
+          customReplacements = settings.custom_replacements || [];
+
+          renderFillerWords();
+          renderReplacements();
         } catch (e) {
           console.error("Failed to load settings:", e);
         }
@@ -123,7 +483,9 @@
           key === "META"
         )
           return;
+
         if (key === " ") key = "Space";
+        if (key === "CONTROL") key = "Ctrl";
 
         const hotkey = [...modifiers, key].join("+");
         hotkeyInput.value = hotkey;
@@ -136,17 +498,26 @@
       // Save settings
       saveBtn.addEventListener("click", async () => {
         try {
+          saveBtn.disabled = true;
+          saveBtn.textContent = "Saving...";
+
           await invoke("save_settings", {
             settings: {
               hotkey: currentHotkey,
               api_key: apiKeyInput.value,
               api_url: apiUrlInput.value,
+              auto_capitalize: autoCapitalizeToggle.checked,
+              remove_filler_words: removeFillerToggle.checked,
+              filler_words: fillerWords,
+              custom_replacements: customReplacements,
             },
           });
 
           await getCurrentWindow().close();
         } catch (e) {
           alert("Failed to save settings: " + e);
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save Changes";
         }
       });
 

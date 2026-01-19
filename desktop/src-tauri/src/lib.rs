@@ -1,13 +1,15 @@
 //! Windows Whisper - Library exports
 
 pub mod audio;
-pub mod settings;
 pub mod commands;
+pub mod postprocessing;
+pub mod settings;
 
 use audio::AudioRecorder;
-use settings::Settings;
 use base64::{engine::general_purpose::STANDARD, Engine};
+use image::EncodableLayout;
 use serde::{Deserialize, Serialize};
+use settings::Settings;
 use std::sync::Mutex;
 use tauri::{
     image::Image,
@@ -16,7 +18,6 @@ use tauri::{
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-use image::EncodableLayout;
 use tokio::sync::{mpsc, watch};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,7 +53,6 @@ impl Default for AppState {
         }
     }
 }
-
 
 const CHUNK_SECONDS: u64 = 10;
 const CHUNK_OVERLAP_SECONDS: u32 = 1;
@@ -205,7 +205,7 @@ fn collapse_repeated_phrases(text: &str) -> String {
 }
 
 fn consolidate_chunk_texts(chunks: &[String]) -> String {
-    let last_idx = chunks.iter().rposition(|text| !text.trim().is_empty());     
+    let last_idx = chunks.iter().rposition(|text| !text.trim().is_empty());
     let mut combined = String::new();
 
     for (idx, chunk) in chunks.iter().enumerate() {
@@ -282,9 +282,9 @@ async fn shutdown_chunking(app: AppHandle, final_chunk: Option<Vec<u8>>) -> Vec<
 #[cfg(target_os = "windows")]
 fn paste_text() -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-    
-    let mut enigo = Enigo::new(&Settings::default())
-        .map_err(|e| format!("Failed to create enigo: {}", e))?;
+
+    let mut enigo =
+        Enigo::new(&Settings::default()).map_err(|e| format!("Failed to create enigo: {}", e))?;
 
     enigo
         .key(Key::Control, Direction::Press)
@@ -295,7 +295,7 @@ fn paste_text() -> Result<(), String> {
     enigo
         .key(Key::Control, Direction::Release)
         .map_err(|e| format!("Failed to release Control: {}", e))?;
-    
+
     Ok(())
 }
 
@@ -303,8 +303,8 @@ fn paste_text() -> Result<(), String> {
 fn paste_text() -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
-    let mut enigo = Enigo::new(&Settings::default())
-        .map_err(|e| format!("Failed to create enigo: {}", e))?;
+    let mut enigo =
+        Enigo::new(&Settings::default()).map_err(|e| format!("Failed to create enigo: {}", e))?;
 
     enigo
         .key(Key::Meta, Direction::Press)
@@ -323,8 +323,8 @@ fn paste_text() -> Result<(), String> {
 fn paste_text() -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
-    let mut enigo = Enigo::new(&Settings::default())
-        .map_err(|e| format!("Failed to create enigo: {}", e))?;
+    let mut enigo =
+        Enigo::new(&Settings::default()).map_err(|e| format!("Failed to create enigo: {}", e))?;
 
     enigo
         .key(Key::Control, Direction::Press)
@@ -368,16 +368,13 @@ fn position_popup_bottom_center(window: &tauri::WebviewWindow) {
         x = x.clamp(min_x, max_x.max(min_x));
         y = y.clamp(min_y, max_y.max(min_y));
 
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-            x,
-            y,
-        }));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
     }
 }
 
 async fn cancel_recording(app: AppHandle) {
     let state = app.state::<AppState>();
-    
+
     // Stop recording state
     {
         *state.is_recording.lock().unwrap() = false;
@@ -385,28 +382,28 @@ async fn cancel_recording(app: AppHandle) {
 
     let _ = shutdown_chunking(app.clone(), None).await;
     let _ = stop_recorder(app.clone()).await;
-    
+
     // Unregister Escape logic
     let escape_shortcut = Shortcut::new(Some(Modifiers::empty()), Code::Escape);
     let _ = app.global_shortcut().unregister(escape_shortcut);
-    
+
     // Hide window
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
-    
+
     let _ = app.emit("show-idle", ());
 }
 
 async fn handle_hotkey_press(app: AppHandle) {
     let state = app.state::<AppState>();
-    
+
     // Check if recording with a scoped lock
     let is_recording_val = {
         let is_rec = state.is_recording.lock().unwrap();
         *is_rec
     };
-    
+
     let escape_shortcut = Shortcut::new(Some(Modifiers::empty()), Code::Escape);
 
     if is_recording_val {
@@ -452,7 +449,10 @@ async fn handle_hotkey_press(app: AppHandle) {
         }
 
         if !has_api {
-            let _ = app.emit("show-error", "API not configured. Right-click tray to configure.");
+            let _ = app.emit(
+                "show-error",
+                "API not configured. Right-click tray to configure.",
+            );
             return;
         }
 
@@ -464,8 +464,15 @@ async fn handle_hotkey_press(app: AppHandle) {
         };
 
         let text = consolidate_chunk_texts(&chunk_texts);
+
+        // Apply post-processing transformations
+        let text = postprocessing::apply_postprocessing(&text, &settings);
+
         if text.is_empty() {
-            let _ = app.emit("show-error", "No text returned from transcription".to_string());
+            let _ = app.emit(
+                "show-error",
+                "No text returned from transcription".to_string(),
+            );
             return;
         }
 
@@ -492,27 +499,27 @@ async fn handle_hotkey_press(app: AppHandle) {
         {
             *state.is_recording.lock().unwrap() = true;
         }
-        
+
         // Initialize recorder if needed
         {
             let mut recorder = state.recorder.lock().unwrap();
             if recorder.is_none() {
-                 *recorder = Some(AudioRecorder::new());
+                *recorder = Some(AudioRecorder::new());
             }
-             
-            if let Some(ref mut rec) = *recorder {
-                 // Create volume channel
-                 let (vol_tx, vol_rx) = std::sync::mpsc::channel();
-                 
-                 // Spawn listener
-                 let app_handle = app.clone();
-                 std::thread::spawn(move || {
-                     while let Ok(level) = vol_rx.recv() {
-                         let _ = app_handle.emit("audio-level", level);
-                     }
-                 });
 
-                 if let Err(e) = rec.start_recording(Some(vol_tx), CHUNK_OVERLAP_SECONDS) {
+            if let Some(ref mut rec) = *recorder {
+                // Create volume channel
+                let (vol_tx, vol_rx) = std::sync::mpsc::channel();
+
+                // Spawn listener
+                let app_handle = app.clone();
+                std::thread::spawn(move || {
+                    while let Ok(level) = vol_rx.recv() {
+                        let _ = app_handle.emit("audio-level", level);
+                    }
+                });
+
+                if let Err(e) = rec.start_recording(Some(vol_tx), CHUNK_OVERLAP_SECONDS) {
                     let _ = app.emit("show-error", format!("Failed to start recording: {}", e));
                     *state.is_recording.lock().unwrap() = false;
                     return;
@@ -561,7 +568,8 @@ async fn handle_hotkey_press(app: AppHandle) {
         let timer_app = app.clone();
         let timer_tx = chunk_tx.clone();
         let timer_handle = tauri::async_runtime::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(CHUNK_SECONDS));
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(CHUNK_SECONDS));
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -600,19 +608,19 @@ async fn handle_hotkey_press(app: AppHandle) {
 
         // Register Escape to cancel
         let _ = app.global_shortcut().register(escape_shortcut);
-        
+
         // Show and position the popup window near the bottom center of the active screen
         if let Some(window) = app.get_webview_window("main") {
             // Keep the popup from stealing focus when it appears.
             let _ = window.set_focusable(false);
             let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                width: 120,
-                height: 45,
+                width: 240,
+                height: 90,
             }));
             position_popup_bottom_center(&window);
             let _ = window.show();
         }
-        
+
         let _ = app.emit("show-recording", ());
     }
 }
@@ -717,41 +725,46 @@ fn parse_hotkey(hotkey_str: &str) -> Option<Shortcut> {
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().with_handler(move |app, shortcut, event| {
-             if event.state == ShortcutState::Pressed {
-                 // Check if it's the configured hotkey
-                 let state = app.state::<AppState>();
-                 let hotkey_str = state.settings.lock().unwrap().hotkey.clone();
-                 if let Some(cfg_shortcut) = parse_hotkey(&hotkey_str) {
-                     if shortcut == &cfg_shortcut {
-                         let app_handle = app.clone();
-                         tauri::async_runtime::spawn(async move {
-                             handle_hotkey_press(app_handle).await;
-                         });
-                         return;
-                     }
-                 }
-                 
-                 // Check if it is Escape
-                 if shortcut.matches(Modifiers::empty(), Code::Escape) {
-                      let app_handle = app.clone();
-                         tauri::async_runtime::spawn(async move {
-                             cancel_recording(app_handle).await;
-                         });
-                 }
-             }
-        }).build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        // Check if it's the configured hotkey
+                        let state = app.state::<AppState>();
+                        let hotkey_str = state.settings.lock().unwrap().hotkey.clone();
+                        if let Some(cfg_shortcut) = parse_hotkey(&hotkey_str) {
+                            if shortcut == &cfg_shortcut {
+                                let app_handle = app.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    handle_hotkey_press(app_handle).await;
+                                });
+                                return;
+                            }
+                        }
+
+                        // Check if it is Escape
+                        if shortcut.matches(Modifiers::empty(), Code::Escape) {
+                            let app_handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                cancel_recording(app_handle).await;
+                            });
+                        }
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
-            commands::hide_popup, 
-            commands::get_settings, 
+            commands::hide_popup,
+            commands::get_settings,
             commands::save_settings
         ])
         .setup(|app| {
             // Create tray menu
-            let settings_item = MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
+            let settings_item =
+                MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
 
@@ -779,7 +792,7 @@ pub fn run() {
                                     WebviewUrl::App("settings.html".into()),
                                 )
                                 .title("Settings")
-                                .inner_size(400.0, 300.0)
+                                .inner_size(550.0, 420.0)
                                 .resizable(false)
                                 .center()
                                 .build();
@@ -796,7 +809,7 @@ pub fn run() {
             // Register global shortcut
             let state = app.state::<AppState>();
             let hotkey_str = state.settings.lock().unwrap().hotkey.clone();
-            
+
             if let Some(shortcut) = parse_hotkey(&hotkey_str) {
                 app.global_shortcut().register(shortcut)?;
             }
