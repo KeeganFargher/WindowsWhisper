@@ -1,8 +1,10 @@
 name: Release
 on:
   push:
+    branches:
+      - master
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -27,8 +29,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
-          cache: 'npm'
+          node-version: "lts/*"
+          cache: "npm"
           cache-dependency-path: desktop/package-lock.json
 
       - name: Install Rust stable
@@ -46,8 +48,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Windows Whisper ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download this version and install.'
+          releaseName: "Windows Whisper ${{ github.ref_name }}"
+          releaseBody: "See the assets to download this version and install."
           releaseDraft: true
           prerelease: false
           projectPath: ./desktop
