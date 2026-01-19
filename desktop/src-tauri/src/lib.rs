@@ -625,7 +625,6 @@ async fn handle_hotkey_press(app: AppHandle) {
             let app_handle = app.clone();
             tauri::async_runtime::spawn(async move {
                 use device_query::{DeviceQuery, DeviceState};
-                let device_state = DeviceState::new();
                 let mut last_anchor: Option<(i32, i32)> = None;
                 let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(16));
 
@@ -644,6 +643,8 @@ async fn handle_hotkey_press(app: AppHandle) {
                     }
                     
                     let anchor = caret_position().or_else(|| {
+                        // Create per-iteration to avoid holding a !Send type across await.
+                        let device_state = DeviceState::new();
                         let mouse = device_state.get_mouse();
                         if mouse.button_pressed.iter().any(|&b| b) {
                             Some((mouse.coords.0, mouse.coords.1))
